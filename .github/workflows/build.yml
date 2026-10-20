@@ -1,0 +1,69 @@
+# ============================================================================
+# ld -- continuous integration
+# ----------------------------------------------------------------------------
+# The workflow builds the linker and runs the test suite.  The tests need an
+# AArch64 cross compiler and qemu-user, they build real AArch64 binaries and
+# run them.
+# ============================================================================
+name: build
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: build and test
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install the AArch64 toolchain and qemu
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu qemu-user
+
+      - name: Build the linker
+        run: |
+          make
+          ./bin/ld --version
+
+      - name: Run the test suite
+        run: |
+          ./tests/run.sh
+
+      - name: Check the Android output
+        run: |
+          # The linker also has to produce Android flavoured binaries.
+          clang --target=aarch64-linux-android -c tests/src/greet.c -o greet.o
+          ./bin/ld -shared -soname libgreet.so -o libgreet.so greet.o
+          readelf -d libgreet.so | grep -q SONAME
+          readelf -h libgreet.so | grep -q AArch64
+
+  sanitizers:
+    name: build with the sanitizers
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install the AArch64 toolchain and qemu
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu qemu-user
+
+      - name: Build with the address and undefined behaviour sanitizers
+        run: |
+          make clean
+          make CFLAGS="-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer"
+
+      - name: Run the test suite
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+        run: |
+          ./tests/run.sh
