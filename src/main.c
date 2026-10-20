@@ -105,6 +105,9 @@ int main(int argc, char **argv) {
 
   /* ---- symbols ---- */
   sym_allocate_commons(ctx);
+  /* the linker provides a few symbols itself, they have to exist before the
+   * undefined symbols are reported */
+  sym_define_linker_symbols(ctx);
   sym_report_undefined(ctx);
   if (ld_error_count()) return 1;
 
@@ -124,6 +127,10 @@ int main(int argc, char **argv) {
 
   /* ---- addresses ---- */
   layout(ctx);
+
+  /* the boundaries of the sections are known now, the linker defined
+   * symbols get their value */
+  sym_update_linker_symbols(ctx);
 
   /* the GOT and PLT addresses are only known after the layout */
   for (size_t i = 0; i < ctx->ngot; i++)

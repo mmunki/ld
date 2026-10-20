@@ -203,6 +203,89 @@ uint64_t sym_address(LdCtx *ctx, Symbol *s) {
   }
 }
 
+/* ------------------------------------------------------ linker defined symbols
+ *
+ * The linker defines a few symbols itself.  They mark the boundaries of the
+ * init and of the fini array, the end of the text, the end of the data and
+ * the end of the image.  The C runtime of Android needs them, the
+ * crtbegin_dynamic.o of bionic walks from __fini_array_start to
+ * __fini_array_end to call the destructors.
+ *
+ * Their value is the address of a section boundary, and that is only known
+ * after the layout, so they are created before the relocations are scanned
+ * and their value is filled in once the addresses are assigned.
+ */
+typedef struct {
+  const char *name;
+  const char *section;   /* the section whose boundary the symbol marks */
+  int         at_end;    /* 0: the start of the section, 1: its end       */
+} LinkerSymbol;
+
+static const LinkerSymbol linker_symbols[] = {
+  { "__init_array_start",  ".init_array", 0 },
+  { "__init_array_end",    ".init_array", 1 },
+  { "__fini_array_start",  ".fini_array", 0 },
+  { "__fini_array_end",    ".fini_array", 1 },
+  { "__preinit_array_start", ".preinit_array", 0 },
+  { "__preinit_array_end",   ".preinit_array", 1 },
+  { "_etext",  ".text", 1 },
+  { "etext",   ".text", 1 },
+  { "__etext", ".text", 1 },
+  { "_edata",  ".data", 1 },
+  { "edata",   ".data", 1 },
+  { "__edata", ".data", 1 },
+  { "__bss_start", ".bss", 0 },
+  { "__bss_end",   ".bss", 1 },
+  { "_end",   ".bss", 1 },
+  { "__end",  ".bss", 1 },
+  { "end",    ".bss", 1 },
+};
+
+static OutSection *out_section_by_name(LdCtx *ctx, const char *name) {
+  for (size_t i = 0; i < ctx->nosecs; i++)
+    if (!strcmp(ctx->osecs[i]->name, name)) return ctx->osecs[i];
+  return NULL;
+}
+
+void sym_define_linker_symbols(LdCtx *ctx) {
+  for (size_t i = 0; i < sizeof(linker_symbols) / sizeof(linker_symbols[0]); i++) {
+    const LinkerSymbol *ls = &linker_symbols[i];
+    Symbol *s = sym_lookup(ctx, ls->name);
+    /* an object file that defines the symbol itself keeps it */
+    if (s && s->state != SYM_UNDEFINED) continue;
+    s = sym_get(ctx, ls->name);
+    s->state = SYM_ABSOLUTE;
+    s->bind = STB_GLOBAL;
+    s->type = STT_NOTYPE;
+    s->visibility = STV_HIDDEN;
+    s->value = 0;
+    s->size = 0;
+  }
+
+  /* the base of the image */
+  Symbol *s = sym_lookup(ctx, "__executable_start");
+  if (!s || s->state == SYM_UNDEFINED) {
+    s = sym_get(ctx, "__executable_start");
+    s->state = SYM_ABSOLUTE;
+    s->bind = STB_GLOBAL;
+    s->type = STT_NOTYPE;
+    s->visibility = STV_HIDDEN;
+  }
+  s->value = ctx->base_addr;
+}
+
+void sym_update_linker_symbols(LdCtx *ctx) {
+  for (size_t i = 0; i < sizeof(linker_symbols) / sizeof(linker_symbols[0]); i++) {
+    const LinkerSymbol *ls = &linker_symbols[i];
+    Symbol *s = sym_lookup(ctx, ls->name);
+    if (!s || s->state != SYM_ABSOLUTE) continue;
+    OutSection *o = out_section_by_name(ctx, ls->section);
+    uint64_t value = 0;
+    if (o) value = ls->at_end ? o->addr + o->size : o->addr;
+    s->value = value;
+  }
+}
+
 /* ------------------------------------------------------- common symbols */
 void sym_allocate_commons(LdCtx *ctx) {
   InputSection *bss = NULL;
