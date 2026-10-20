@@ -190,7 +190,39 @@ if want "archive"; then
 fi
 
 # ============================================================================
-# 5. the structure of the produced image
+# 5. a global constructor
+# ============================================================================
+if want "constructor"; then
+  GCCDIR="$(dirname "$(command -v "$CC" 2>/dev/null || echo /nonexistent)")"
+  CRT=""
+  for dir in /usr/lib/gcc-cross/aarch64-linux-gnu/*; do
+    [ -f "$dir/crtbeginS.o" ] && CRT="$dir"
+  done
+  if [ "$HAVE_CROSS" != 1 ] || [ -z "$SYSROOT" ] || [ -z "$CRT" ]; then
+    skip "global constructor" "no aarch64 sysroot or crt files"
+  else
+    compile constructor.c "$WORK/constructor.o" -fPIE -O2
+    "$LD" -pie -o "$WORK/constructor" "$WORK/constructor.o" \
+      "$CRT/crtbeginS.o" "$CRT/crtendS.o" "$SYSROOT/lib/Scrt1.o" \
+      "$SYSROOT/lib/crti.o" "$SYSROOT/lib/crtn.o" \
+      -dynamic-linker /lib/ld-linux-aarch64.so.1 "$SYSROOT/lib/libc.so.6" \
+      2>"$WORK/err"
+    if [ $? != 0 ]; then
+      bad "global constructor (link)"
+      cat "$WORK/err"
+    elif [ "$HAVE_QEMU" != 1 ]; then
+      skip "global constructor" "$QEMU not found"
+    else
+      check_output "global constructor" \
+        "ld: the constructor ran
+ld: main ran" \
+        "$QEMU" -L "$SYSROOT" "$WORK/constructor"
+    fi
+  fi
+fi
+
+# ============================================================================
+# 6. the structure of the produced image
 # ============================================================================
 if want "layout"; then
   if [ "$HAVE_CROSS" != 1 ] || [ -z "$SYSROOT" ]; then
