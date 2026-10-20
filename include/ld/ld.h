@@ -325,6 +325,8 @@ void    sym_reference(LdCtx *ctx, const char *name, uint8_t bind);
 uint64_t sym_address(LdCtx *ctx, Symbol *s);
 void    sym_allocate_commons(LdCtx *ctx);
 void    sym_report_undefined(LdCtx *ctx);
+void    sym_define_linker_symbols(LdCtx *ctx);
+void    sym_update_linker_symbols(LdCtx *ctx);
 
 /* ------------------------------------------------------------------ sections */
 OutSection *osec_get(LdCtx *ctx, const char *name, uint32_t type, uint64_t flags);
