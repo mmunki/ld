@@ -36,7 +36,7 @@ static void add_str(char ***list, size_t *count, const char *value) {
 }
 
 void options_version(FILE *out) {
-  fprintf(out, "ld (mmunki aarch64-android linker) 0.1.0\n");
+  fprintf(out, "ld (mmunki aarch64-android linker) 0.1.1\n");
   fprintf(out, "Target: aarch64-linux-android (ELF64, little endian)\n");
   fprintf(out, "Copyright (C) 2026 mmunki. License Apache-2.0.\n");
 }
